@@ -1,0 +1,83 @@
+# Taskfile for ppm — https://taskfile.dev
+version: '3'
+
+vars:
+  BINARY: ppm
+  PKG: github.com/ipedrazas/ppm
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  LDFLAGS: -s -w -X {{.PKG}}/cmd.version={{.VERSION}}
+
+tasks:
+  default:
+    desc: Build the binary
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the ppm binary into ./bin
+    cmds:
+      - go build -ldflags "{{.LDFLAGS}}" -o bin/{{.BINARY}} .
+
+  install:
+    desc: Install ppm into $GOBIN
+    cmds:
+      - go install -ldflags "{{.LDFLAGS}}" .
+
+  run:
+    desc: 'Run ppm (e.g. task run -- project list)'
+    cmds:
+      - go run -ldflags "{{.LDFLAGS}}" . {{.CLI_ARGS}}
+
+  test:
+    desc: Run tests with the race detector and coverage
+    cmds:
+      - go test -race -cover ./...
+
+  cover:
+    desc: Generate an HTML coverage report
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  fmt:
+    desc: Format all Go code
+    cmds:
+      - gofmt -w .
+
+  fmt:check:
+    desc: Fail if any Go file is not gofmt-clean
+    cmds:
+      - |
+        unformatted="$(gofmt -l .)"
+        if [ -n "$unformatted" ]; then
+          echo "These files need gofmt:"; echo "$unformatted"; exit 1
+        fi
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Tidy go.mod / go.sum
+    cmds:
+      - go mod tidy
+
+  ci:
+    desc: Run the full CI suite locally (fmt check, vet, test, build)
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: test
+      - task: build
+
+  snapshot:
+    desc: Build a local snapshot release with GoReleaser (no publish)
+    cmds:
+      - goreleaser release --snapshot --clean
+
+  clean:
+    desc: Remove build and coverage artifacts
+    cmds:
+      - rm -rf bin dist coverage.out coverage.html
