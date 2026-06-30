@@ -80,6 +80,7 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm focus set <project>` | Replace the project focus |
 | `ppm standard add <id> --check C --applies-to S` | Declare a cross-cutting invariant |
 | `ppm standard list` / `show <id>` / `retire <id>` | Manage standards |
+| `ppm waive <concern-id> <project> --content R` | Record a reasoned exception |
 | `ppm audit [--standard ID\|--check C] [--tag T\|--project P]` | Cross-project compliance matrix |
 
 Global flags: `--root`, `-o/--output json|text`, `--pretty`, `--version`.
@@ -103,11 +104,16 @@ ppm standard add target-metric --applies-to all --check manual --severity block 
 ppm audit                          # every active standard over its own scope
 ppm audit --standard has-summary   # one standard
 ppm audit --check no-stale-questions:14d --tag backend   # ad-hoc check, no standard
+
+# an intentional exception: shows as 'waived' (not 'fail'), reason required
+ppm waive has-summary billing --content "Legacy service; summary lives in the wiki."
 ```
 
 Each cell gets a status — `pass`/`fail`/`waived`/`unknown`/`n/a` — with a reason,
 and a rollup closes the report. A `manual` standard reports `unknown` for the agent
-to judge; everything else is evaluated for free from existing data.
+to judge; everything else is evaluated for free from existing data. A **waiver**
+turns an actionable `fail`/`unknown` into a reasoned `waived` (it never masks a
+`pass` or an out-of-scope `n/a`), so the matrix stays free of alert fatigue.
 
 Built-in checks: `has-summary`, `has-focus`, `decisions-link-tasks`,
 `active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Standard scope

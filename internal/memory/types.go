@@ -21,6 +21,12 @@ const (
 	// so it is addressed by dedicated store methods rather than the project-scoped
 	// Write. See WorkspaceRegistries.
 	TypeStandard EntryType = "standard"
+
+	// TypeWaiver is a project-scoped, reasoned exception of one standard. It is a
+	// normal project collection (so it flows through Write), but is deliberately
+	// kept out of CollectionTypes — it is a cross-cutting overlay consumed by
+	// audit, not part of a project's narrative inventory.
+	TypeWaiver EntryType = "waiver"
 )
 
 // Cardinality distinguishes singletons (one file at the project root) from
@@ -50,6 +56,7 @@ var Registries = map[EntryType]Registry{
 	TypeTask:         {Collection, "tasks"},
 	TypeNote:         {Collection, "notes"},
 	TypeConversation: {Collection, "conversations"},
+	TypeWaiver:       {Collection, "waivers"},
 }
 
 // WorkspaceRegistries is the source of truth for workspace-level collections —

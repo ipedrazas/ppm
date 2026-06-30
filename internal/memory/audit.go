@@ -215,6 +215,15 @@ func (s *Store) evalStandard(std Standard, restrict string, now time.Time) ([]Au
 			r := check(s, p, now)
 			cell.Status, cell.Reason, cell.Detail = r.status, r.reason, r.detail
 		}
+		// A waiver turns an actionable fail/unknown into an explicit, reasoned
+		// exception — but never masks an n/a (out of scope) or a pass.
+		if cell.Status == StatusFail || cell.Status == StatusUnknown {
+			if reason, ok := s.waiverFor(p, std.ID); ok {
+				cell.Status = StatusWaived
+				cell.Reason = orDefaultStr(reason, "waived")
+				cell.Detail = ""
+			}
+		}
 		cells = append(cells, cell)
 	}
 	return cells, nil
@@ -227,6 +236,13 @@ func newReport() *AuditReport {
 func (r *AuditReport) add(c AuditCell) {
 	r.Matrix = append(r.Matrix, c)
 	r.Summary[c.Status]++
+}
+
+func orDefaultStr(v, def string) string {
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return v
 }
 
 func intersect(a, b []string) []string {
