@@ -80,40 +80,53 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm focus set <project>` | Replace the project focus |
 | `ppm standard add <id> --check C --applies-to S` | Declare a cross-cutting invariant |
 | `ppm standard list` / `show <id>` / `retire <id>` | Manage standards |
+| `ppm initiative add <id> --applies-to S` | Declare a cross-project campaign |
+| `ppm initiative bind <id> <project> --ref R` | Bind a project (scaffolds a backlinked task) |
+| `ppm initiative list` / `show <id>` / `update <id> --status` | Manage initiatives + rollup |
+| `ppm verdict <standard-id> <project> --status pass\|fail` | Resolve a manual standard |
 | `ppm waive <concern-id> <project> --content R` | Record a reasoned exception |
-| `ppm audit [--standard ID\|--check C] [--tag T\|--project P]` | Cross-project compliance matrix |
+| `ppm audit [--standard ID\|--initiative ID\|--check C] [--tag T\|--project P]` | Cross-project compliance matrix |
 
 Global flags: `--root`, `-o/--output json|text`, `--pretty`, `--version`.
 
 ## Cross-cutting concerns
 
 `ppm` manages independent projects, but also lets you enforce **consistency
-across** them. Tag projects, declare **standards** (a check bound to a scope and a
-severity), then `audit` to get a compliance matrix back. See
+across** them. Tag projects, then either declare **standards** (an invariant every
+in-scope project must satisfy) or **initiatives** (a campaign that needs work in
+each member project), and `audit` to get a compliance matrix back. See
 [`plans/cross-cutting-concerns.md`](plans/cross-cutting-concerns.md) for the full
-design (standards, initiatives, waivers); tags + standards + `audit` ship now.
+design.
 
 ```sh
 ppm project update billing --tag backend --tag customer-facing
 
-# a structural standard (auto-evaluated) and a manual one (agent-judged)
+# standards: a structural one (auto-evaluated) and a manual one (agent-judged)
 ppm standard add has-summary --applies-to tag:backend --check has-summary --severity warn
 ppm standard add target-metric --applies-to all --check manual --severity block \
     --content "Summary must name a measurable target metric."
 
-ppm audit                          # every active standard over its own scope
-ppm audit --standard has-summary   # one standard
-ppm audit --check no-stale-questions:14d --tag backend   # ad-hoc check, no standard
+# initiatives: a campaign, bound per project to a backlinked tracker task
+ppm initiative add gdpr-2026 --applies-to tag:customer-facing --content "Data-handling review."
+ppm initiative bind gdpr-2026 onboarding --ref ENG-411 --url https://linear.app/x/411
+ppm initiative show gdpr-2026          # rollup: bound 1/2 members …
 
-# an intentional exception: shows as 'waived' (not 'fail'), reason required
+ppm audit                              # every active standard + initiative over its scope
+ppm audit --initiative gdpr-2026       # one concern
+ppm audit --check no-stale-questions:14d --tag backend   # ad-hoc check, no concern
+
+# resolve a manual standard's 'unknown'; record a reasoned exception
+ppm verdict target-metric onboarding --status pass --content "Names DAU lift target."
 ppm waive has-summary billing --content "Legacy service; summary lives in the wiki."
 ```
 
 Each cell gets a status — `pass`/`fail`/`waived`/`unknown`/`n/a` — with a reason,
-and a rollup closes the report. A `manual` standard reports `unknown` for the agent
-to judge; everything else is evaluated for free from existing data. A **waiver**
-turns an actionable `fail`/`unknown` into a reasoned `waived` (it never masks a
-`pass` or an out-of-scope `n/a`), so the matrix stays free of alert fatigue.
+and a rollup closes the report. A `manual` standard reports `unknown` until a
+**verdict** records a pass/fail judgement; an **initiative** member passes once a
+task backlinks to it (`bind` scaffolds that). Everything else is evaluated for free
+from existing data. A **waiver** turns an actionable `fail`/`unknown` into a
+reasoned `waived` (it never masks a `pass` or an out-of-scope `n/a`), so the matrix
+stays free of alert fatigue.
 
 Built-in checks: `has-summary`, `has-focus`, `decisions-link-tasks`,
 `active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Standard scope

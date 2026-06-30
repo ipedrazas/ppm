@@ -177,6 +177,99 @@ func (s *Store) AuditStandard(id, restrict string, now time.Time) (*AuditReport,
 	return rep, nil
 }
 
+// AuditInitiatives runs every active initiative: each member project passes if a
+// task backlinks to the initiative, else fails (a waiver turns that fail into
+// waived). Restrict narrows the project axis. Paused/done initiatives are skipped.
+func (s *Store) AuditInitiatives(restrict string, now time.Time) (*AuditReport, error) {
+	inits, err := s.ListInitiatives()
+	if err != nil {
+		return nil, err
+	}
+	rep := newReport()
+	for _, init := range inits {
+		if init.Status != "active" {
+			continue
+		}
+		cells, err := s.evalInitiative(init, restrict)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cells {
+			rep.add(c)
+		}
+	}
+	return rep, nil
+}
+
+// AuditInitiative runs a single initiative by id, regardless of its status.
+func (s *Store) AuditInitiative(id, restrict string) (*AuditReport, error) {
+	init, err := s.ReadInitiative(id)
+	if err != nil {
+		return nil, err
+	}
+	cells, err := s.evalInitiative(*init, restrict)
+	if err != nil {
+		return nil, err
+	}
+	rep := newReport()
+	for _, c := range cells {
+		rep.add(c)
+	}
+	return rep, nil
+}
+
+// AuditAll runs every active standard and initiative — the default `ppm audit`.
+func (s *Store) AuditAll(restrict string, now time.Time) (*AuditReport, error) {
+	rep := newReport()
+	stds, err := s.AuditStandards(restrict, now)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range stds.Matrix {
+		rep.add(c)
+	}
+	inits, err := s.AuditInitiatives(restrict, now)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range inits.Matrix {
+		rep.add(c)
+	}
+	return rep, nil
+}
+
+func (s *Store) evalInitiative(init Initiative, restrict string) ([]AuditCell, error) {
+	projects, err := s.ResolveScope(init.AppliesTo)
+	if err != nil {
+		return nil, err
+	}
+	if restrict != "" && restrict != "all" {
+		allowed, err := s.ResolveScope(restrict)
+		if err != nil {
+			return nil, err
+		}
+		projects = intersect(projects, allowed)
+	}
+
+	cells := make([]AuditCell, 0, len(projects))
+	for _, p := range projects {
+		cell := AuditCell{Concern: init.ID, Kind: "initiative", Project: p}
+		if task, bound := s.boundTask(p, init.ID); bound {
+			cell.Status, cell.Detail = StatusPass, "bound → "+task
+		} else {
+			cell.Status, cell.Reason = StatusFail, "no linked task"
+		}
+		if cell.Status == StatusFail {
+			if reason, ok := s.waiverFor(p, init.ID); ok {
+				cell.Status = StatusWaived
+				cell.Reason = orDefaultStr(reason, "waived")
+			}
+		}
+		cells = append(cells, cell)
+	}
+	return cells, nil
+}
+
 // evalStandard resolves a standard's scope (intersected with restrict) and
 // evaluates its check per project. A manual or unresolvable check yields unknown.
 func (s *Store) evalStandard(std Standard, restrict string, now time.Time) ([]AuditCell, error) {
@@ -210,7 +303,13 @@ func (s *Store) evalStandard(std Standard, restrict string, now time.Time) ([]Au
 			Project:  p,
 		}
 		if manual {
-			cell.Status, cell.Reason = StatusUnknown, "manual check"
+			// A recorded verdict resolves a manual standard beyond unknown.
+			if v, ok := s.verdictFor(p, std.ID); ok && v.Status != "" {
+				cell.Status = AuditStatus(v.Status)
+				cell.Reason = orDefaultStr(v.Reason, "manual verdict")
+			} else {
+				cell.Status, cell.Reason = StatusUnknown, "manual check"
+			}
 		} else {
 			r := check(s, p, now)
 			cell.Status, cell.Reason, cell.Detail = r.status, r.reason, r.detail

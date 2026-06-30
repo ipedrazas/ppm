@@ -11,29 +11,30 @@ import (
 )
 
 var (
-	auditCheck    string
-	auditStandard string
-	auditTag      string
-	auditProject  string
+	auditCheck      string
+	auditStandard   string
+	auditInitiative string
+	auditTag        string
+	auditProject    string
 )
 
 var auditCmd = &cobra.Command{
 	Use:   "audit",
 	Short: "Evaluate standards across projects (the compliance matrix)",
 	Long: "Emit a cross-project compliance matrix. With no flags, runs every active\n" +
-		"standard over its own applies-to scope. Use --standard to run one standard,\n" +
-		"or --check to run an ad-hoc built-in check over all projects. Narrow the\n" +
-		"project axis with --tag or --project. Built-in checks: has-summary,\n" +
-		"has-focus, decisions-link-tasks, active-has-tracker, no-stale-questions:Nd,\n" +
-		"freshness:Nd.",
+		"standard and initiative over its own applies-to scope. Use --standard or\n" +
+		"--initiative to run one, or --check for an ad-hoc built-in check over all\n" +
+		"projects. Narrow the project axis with --tag or --project. Built-in checks:\n" +
+		"has-summary, has-focus, decisions-link-tasks, active-has-tracker,\n" +
+		"no-stale-questions:Nd, freshness:Nd.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		st, err := openStore()
 		if err != nil {
 			return err
 		}
-		if auditCheck != "" && auditStandard != "" {
-			return fmt.Errorf("pass at most one of --check/--standard")
+		if err := exactlyOneAuditTarget(); err != nil {
+			return err
 		}
 		restrict, err := auditScope()
 		if err != nil {
@@ -47,8 +48,10 @@ var auditCmd = &cobra.Command{
 			rep, err = st.Audit(auditCheck, restrict, now)
 		case auditStandard != "":
 			rep, err = st.AuditStandard(auditStandard, restrict, now)
+		case auditInitiative != "":
+			rep, err = st.AuditInitiative(auditInitiative, restrict)
 		default:
-			rep, err = st.AuditStandards(restrict, now)
+			rep, err = st.AuditAll(restrict, now)
 		}
 		if err != nil {
 			return err
@@ -59,6 +62,21 @@ var auditCmd = &cobra.Command{
 			Data:    rep,
 		})
 	},
+}
+
+// exactlyOneAuditTarget rejects combining the mutually exclusive target flags
+// (--check/--standard/--initiative); zero is fine and means "all".
+func exactlyOneAuditTarget() error {
+	n := 0
+	for _, v := range []string{auditCheck, auditStandard, auditInitiative} {
+		if v != "" {
+			n++
+		}
+	}
+	if n > 1 {
+		return fmt.Errorf("pass at most one of --check/--standard/--initiative")
+	}
+	return nil
 }
 
 // auditScope reconciles --tag/--project into a single applies-to expression.
@@ -113,7 +131,8 @@ func formatAudit(r *memory.AuditReport) string {
 func init() {
 	f := auditCmd.Flags()
 	f.StringVar(&auditCheck, "check", "", "run an ad-hoc built-in check, e.g. has-summary | no-stale-questions:14d")
-	f.StringVar(&auditStandard, "standard", "", "run a single standard by id (else all active standards)")
+	f.StringVar(&auditStandard, "standard", "", "run a single standard by id")
+	f.StringVar(&auditInitiative, "initiative", "", "run a single initiative by id")
 	f.StringVar(&auditTag, "tag", "", "restrict the project axis to this tag")
 	f.StringVar(&auditProject, "project", "", "restrict the project axis to a single project")
 	rootCmd.AddCommand(auditCmd)

@@ -27,6 +27,16 @@ const (
 	// kept out of CollectionTypes — it is a cross-cutting overlay consumed by
 	// audit, not part of a project's narrative inventory.
 	TypeWaiver EntryType = "waiver"
+
+	// TypeInitiative is a workspace-level cross-project campaign (a GDPR review, a
+	// migration). Like a standard it lives in a workspace collection; member work
+	// is a normal task entry in each project that backlinks to the initiative.
+	TypeInitiative EntryType = "initiative"
+
+	// TypeVerdict is a project-scoped record of a manual standard's judgement
+	// (pass/fail + rationale), letting a manual standard resolve beyond "unknown".
+	// Like waiver it is a project collection kept out of CollectionTypes.
+	TypeVerdict EntryType = "verdict"
 )
 
 // Cardinality distinguishes singletons (one file at the project root) from
@@ -57,6 +67,7 @@ var Registries = map[EntryType]Registry{
 	TypeNote:         {Collection, "notes"},
 	TypeConversation: {Collection, "conversations"},
 	TypeWaiver:       {Collection, "waivers"},
+	TypeVerdict:      {Collection, "verdicts"},
 }
 
 // WorkspaceRegistries is the source of truth for workspace-level collections —
@@ -64,7 +75,8 @@ var Registries = map[EntryType]Registry{
 // root (parallel to projects/). They are addressed by dedicated store methods,
 // keeping the project-scoped Write path unchanged.
 var WorkspaceRegistries = map[EntryType]Registry{
-	TypeStandard: {Collection, "standards"},
+	TypeStandard:   {Collection, "standards"},
+	TypeInitiative: {Collection, "initiatives"},
 }
 
 // Entry is a single memory entry with its parsed frontmatter and body.
