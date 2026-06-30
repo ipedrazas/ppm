@@ -78,29 +78,41 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm conversation add <project> [--name]` | Add a conversation (alias `conv`) |
 | `ppm summary set <project>` | Replace the project summary |
 | `ppm focus set <project>` | Replace the project focus |
-| `ppm audit --check C [--tag T\|--project P]` | Cross-project compliance matrix |
+| `ppm standard add <id> --check C --applies-to S` | Declare a cross-cutting invariant |
+| `ppm standard list` / `show <id>` / `retire <id>` | Manage standards |
+| `ppm audit [--standard ID\|--check C] [--tag T\|--project P]` | Cross-project compliance matrix |
 
 Global flags: `--root`, `-o/--output json|text`, `--pretty`, `--version`.
 
 ## Cross-cutting concerns
 
-`ppm` manages independent projects, but also lets you check **consistency across**
-them. Tag projects, then run a built-in structural **check** over every project in
-a scope and get a compliance matrix back. See
+`ppm` manages independent projects, but also lets you enforce **consistency
+across** them. Tag projects, declare **standards** (a check bound to a scope and a
+severity), then `audit` to get a compliance matrix back. See
 [`plans/cross-cutting-concerns.md`](plans/cross-cutting-concerns.md) for the full
-design (standards, initiatives, waivers); the first slice — tags + `audit` — ships
-now.
+design (standards, initiatives, waivers); tags + standards + `audit` ship now.
 
 ```sh
 ppm project update billing --tag backend --tag customer-facing
-ppm audit --check has-summary --tag backend     # all backend projects
-ppm audit --check no-stale-questions:14d        # every project, default scope
+
+# a structural standard (auto-evaluated) and a manual one (agent-judged)
+ppm standard add has-summary --applies-to tag:backend --check has-summary --severity warn
+ppm standard add target-metric --applies-to all --check manual --severity block \
+    --content "Summary must name a measurable target metric."
+
+ppm audit                          # every active standard over its own scope
+ppm audit --standard has-summary   # one standard
+ppm audit --check no-stale-questions:14d --tag backend   # ad-hoc check, no standard
 ```
 
+Each cell gets a status — `pass`/`fail`/`waived`/`unknown`/`n/a` — with a reason,
+and a rollup closes the report. A `manual` standard reports `unknown` for the agent
+to judge; everything else is evaluated for free from existing data.
+
 Built-in checks: `has-summary`, `has-focus`, `decisions-link-tasks`,
-`active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Each project gets a
-status (`pass`/`fail`/`n/a`) with a reason; a summary rollup closes the report.
-Scope defaults to all projects; narrow with `--tag` or `--project`.
+`active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Standard scope
+(`--applies-to`) and the `audit` project axis (`--tag`/`--project`) both accept
+`all`, `tag:<t>`, or a comma-separated slug list.
 
 ## Output contract
 

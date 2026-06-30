@@ -24,13 +24,19 @@ const (
 	placeholderFocus   = "_No current focus yet._"
 )
 
-// AuditCell is one (check, project) result in the compliance matrix.
+// AuditCell is one (concern, project) result in the compliance matrix. Concern
+// is the standard id (Kind "standard") or, for an ad-hoc `--check`, the check id
+// (Kind "check"). Check holds the resolved built-in check; Severity is carried
+// from the standard.
 type AuditCell struct {
-	Check   string      `json:"check"`
-	Project string      `json:"project"`
-	Status  AuditStatus `json:"status"`
-	Reason  string      `json:"reason,omitempty"`
-	Detail  string      `json:"detail,omitempty"`
+	Concern  string      `json:"concern"`
+	Kind     string      `json:"kind"`
+	Check    string      `json:"check,omitempty"`
+	Severity string      `json:"severity,omitempty"`
+	Project  string      `json:"project"`
+	Status   AuditStatus `json:"status"`
+	Reason   string      `json:"reason,omitempty"`
+	Detail   string      `json:"detail,omitempty"`
 }
 
 // AuditReport is the compliance matrix plus a status rollup.
@@ -100,8 +106,9 @@ func parseDays(param string, def int) (int, error) {
 	return n, nil
 }
 
-// Audit runs one built-in check across the projects matching scope and returns
-// the compliance matrix with a status rollup. Pass time.Now().UTC() for now.
+// Audit runs one ad-hoc built-in check across the projects matching scope (the
+// `ppm audit --check` path) and returns the compliance matrix with a status
+// rollup. Pass time.Now().UTC() for now.
 func (s *Store) Audit(checkID, scope string, now time.Time) (*AuditReport, error) {
 	check, err := ResolveCheck(checkID)
 	if err != nil {
@@ -111,19 +118,129 @@ func (s *Store) Audit(checkID, scope string, now time.Time) (*AuditReport, error
 	if err != nil {
 		return nil, err
 	}
-	rep := &AuditReport{Summary: map[AuditStatus]int{}}
+	rep := newReport()
 	for _, p := range projects {
 		r := check(s, p, now)
-		rep.Matrix = append(rep.Matrix, AuditCell{
+		rep.add(AuditCell{
+			Concern: checkID,
+			Kind:    "check",
 			Check:   checkID,
 			Project: p,
 			Status:  r.status,
 			Reason:  r.reason,
 			Detail:  r.detail,
 		})
-		rep.Summary[r.status]++
 	}
 	return rep, nil
+}
+
+// AuditStandards runs every active standard over its own applies-to scope,
+// optionally intersected with restrict (from --tag/--project), and returns the
+// combined matrix. A "manual" standard yields unknown cells for the agent to
+// judge. Retired standards are skipped.
+func (s *Store) AuditStandards(restrict string, now time.Time) (*AuditReport, error) {
+	stds, err := s.ListStandards()
+	if err != nil {
+		return nil, err
+	}
+	rep := newReport()
+	for _, std := range stds {
+		if std.Status == "retired" {
+			continue
+		}
+		cells, err := s.evalStandard(std, restrict, now)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range cells {
+			rep.add(c)
+		}
+	}
+	return rep, nil
+}
+
+// AuditStandard runs a single standard by id over its scope (intersected with
+// restrict), even if it is retired.
+func (s *Store) AuditStandard(id, restrict string, now time.Time) (*AuditReport, error) {
+	std, err := s.ReadStandard(id)
+	if err != nil {
+		return nil, err
+	}
+	cells, err := s.evalStandard(*std, restrict, now)
+	if err != nil {
+		return nil, err
+	}
+	rep := newReport()
+	for _, c := range cells {
+		rep.add(c)
+	}
+	return rep, nil
+}
+
+// evalStandard resolves a standard's scope (intersected with restrict) and
+// evaluates its check per project. A manual or unresolvable check yields unknown.
+func (s *Store) evalStandard(std Standard, restrict string, now time.Time) ([]AuditCell, error) {
+	projects, err := s.ResolveScope(std.AppliesTo)
+	if err != nil {
+		return nil, err
+	}
+	if restrict != "" && restrict != "all" {
+		allowed, err := s.ResolveScope(restrict)
+		if err != nil {
+			return nil, err
+		}
+		projects = intersect(projects, allowed)
+	}
+
+	manual := std.Check == "" || std.Check == "manual"
+	var check builtinCheck
+	if !manual {
+		if check, err = ResolveCheck(std.Check); err != nil {
+			manual = true // a stored invalid check shouldn't nuke the whole audit
+		}
+	}
+
+	cells := make([]AuditCell, 0, len(projects))
+	for _, p := range projects {
+		cell := AuditCell{
+			Concern:  std.ID,
+			Kind:     "standard",
+			Check:    std.Check,
+			Severity: std.Severity,
+			Project:  p,
+		}
+		if manual {
+			cell.Status, cell.Reason = StatusUnknown, "manual check"
+		} else {
+			r := check(s, p, now)
+			cell.Status, cell.Reason, cell.Detail = r.status, r.reason, r.detail
+		}
+		cells = append(cells, cell)
+	}
+	return cells, nil
+}
+
+func newReport() *AuditReport {
+	return &AuditReport{Summary: map[AuditStatus]int{}}
+}
+
+func (r *AuditReport) add(c AuditCell) {
+	r.Matrix = append(r.Matrix, c)
+	r.Summary[c.Status]++
+}
+
+func intersect(a, b []string) []string {
+	set := make(map[string]bool, len(b))
+	for _, x := range b {
+		set[x] = true
+	}
+	var out []string
+	for _, x := range a {
+		if set[x] {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func checkHasSummary(s *Store, project string, _ time.Time) checkResult {

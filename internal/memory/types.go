@@ -15,6 +15,12 @@ const (
 	TypeTask         EntryType = "task"
 	TypeNote         EntryType = "note"
 	TypeConversation EntryType = "conversation"
+
+	// TypeStandard is a workspace-level cross-cutting invariant. It lives in the
+	// workspace standards/ collection (parallel to projects/), not under a project,
+	// so it is addressed by dedicated store methods rather than the project-scoped
+	// Write. See WorkspaceRegistries.
+	TypeStandard EntryType = "standard"
 )
 
 // Cardinality distinguishes singletons (one file at the project root) from
@@ -44,6 +50,14 @@ var Registries = map[EntryType]Registry{
 	TypeTask:         {Collection, "tasks"},
 	TypeNote:         {Collection, "notes"},
 	TypeConversation: {Collection, "conversations"},
+}
+
+// WorkspaceRegistries is the source of truth for workspace-level collections —
+// cross-cutting concerns that belong to no single project and live at the memory
+// root (parallel to projects/). They are addressed by dedicated store methods,
+// keeping the project-scoped Write path unchanged.
+var WorkspaceRegistries = map[EntryType]Registry{
+	TypeStandard: {Collection, "standards"},
 }
 
 // Entry is a single memory entry with its parsed frontmatter and body.
