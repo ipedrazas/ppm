@@ -63,7 +63,7 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm project create <slug> --title T` | Create a project (scaffolds index/summary/focus) |
 | `ppm project list` | List all projects |
 | `ppm project show <slug>` | Project shape (entry inventory, no content) |
-| `ppm project update <slug> [--status\|--title\|--tracker-*]` | Edit index frontmatter |
+| `ppm project update <slug> [--status\|--title\|--tracker-*\|--tag\|--untag]` | Edit index frontmatter / tags |
 | `ppm read [project] [--type T] [--name N]` | Full content (no project → workspace index) |
 | `ppm search <query>` | Full-text search across all memory |
 | `ppm context <project> [--recent N]` | Emit the injected context slice |
@@ -78,8 +78,29 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm conversation add <project> [--name]` | Add a conversation (alias `conv`) |
 | `ppm summary set <project>` | Replace the project summary |
 | `ppm focus set <project>` | Replace the project focus |
+| `ppm audit --check C [--tag T\|--project P]` | Cross-project compliance matrix |
 
 Global flags: `--root`, `-o/--output json|text`, `--pretty`, `--version`.
+
+## Cross-cutting concerns
+
+`ppm` manages independent projects, but also lets you check **consistency across**
+them. Tag projects, then run a built-in structural **check** over every project in
+a scope and get a compliance matrix back. See
+[`plans/cross-cutting-concerns.md`](plans/cross-cutting-concerns.md) for the full
+design (standards, initiatives, waivers); the first slice — tags + `audit` — ships
+now.
+
+```sh
+ppm project update billing --tag backend --tag customer-facing
+ppm audit --check has-summary --tag backend     # all backend projects
+ppm audit --check no-stale-questions:14d        # every project, default scope
+```
+
+Built-in checks: `has-summary`, `has-focus`, `decisions-link-tasks`,
+`active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Each project gets a
+status (`pass`/`fail`/`n/a`) with a reason; a summary rollup closes the report.
+Scope defaults to all projects; narrow with `--tag` or `--project`.
 
 ## Output contract
 

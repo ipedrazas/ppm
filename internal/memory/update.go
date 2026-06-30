@@ -14,12 +14,17 @@ type ProjectUpdate struct {
 	TrackerSystem  *string
 	TrackerProject *string
 	TrackerURL     *string
+	// AddTags / RemoveTags merge into the index's tags sequence (additive then
+	// subtractive), driving tag:<t> scoping for cross-cutting concerns.
+	AddTags    []string
+	RemoveTags []string
 }
 
 // IsEmpty reports whether no field was provided.
 func (u ProjectUpdate) IsEmpty() bool {
 	return u.Title == nil && u.Status == nil &&
-		u.TrackerSystem == nil && u.TrackerProject == nil && u.TrackerURL == nil
+		u.TrackerSystem == nil && u.TrackerProject == nil && u.TrackerURL == nil &&
+		len(u.AddTags) == 0 && len(u.RemoveTags) == 0
 }
 
 // UpdateProject applies frontmatter edits to a project's index and bumps the
@@ -49,6 +54,9 @@ func (s *Store) UpdateProject(project string, u ProjectUpdate) (*Entry, error) {
 			setMapScalar(tracker, "url", *u.TrackerURL)
 		}
 	}
+	if len(u.AddTags) > 0 || len(u.RemoveTags) > 0 {
+		fm.SetSeq("tags", mergeTags(fm.GetSeq("tags"), u.AddTags, u.RemoveTags))
+	}
 	fm.Set("updated", Today())
 
 	rel := projectRel(project, "index.md")
@@ -63,4 +71,37 @@ func (s *Store) UpdateProject(project string, u ProjectUpdate) (*Entry, error) {
 		Body:        strings.TrimSpace(body),
 		RelPath:     rel,
 	}, nil
+}
+
+// mergeTags applies an additive-then-subtractive merge over a project's tags:
+// existing ∪ add, minus remove, deduplicated, insertion order preserved.
+func mergeTags(existing, add, remove []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(existing)+len(add))
+	for _, t := range existing {
+		if t = strings.TrimSpace(t); t != "" && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	for _, t := range add {
+		if t = strings.TrimSpace(t); t != "" && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	if len(remove) == 0 {
+		return out
+	}
+	rm := map[string]bool{}
+	for _, t := range remove {
+		rm[strings.TrimSpace(t)] = true
+	}
+	kept := out[:0]
+	for _, t := range out {
+		if !rm[t] {
+			kept = append(kept, t)
+		}
+	}
+	return kept
 }

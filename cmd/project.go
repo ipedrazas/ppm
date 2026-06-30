@@ -118,6 +118,8 @@ var (
 	updTrackerSystem  string
 	updTrackerProject string
 	updTrackerURL     string
+	updAddTags        []string
+	updRemoveTags     []string
 )
 
 var projectUpdateCmd = &cobra.Command{
@@ -146,8 +148,10 @@ var projectUpdateCmd = &cobra.Command{
 		if f.Changed("tracker-url") {
 			up.TrackerURL = &updTrackerURL
 		}
+		up.AddTags = updAddTags
+		up.RemoveTags = updRemoveTags
 		if up.IsEmpty() {
-			return fmt.Errorf("nothing to update: pass at least one of --title/--status/--tracker-*")
+			return fmt.Errorf("nothing to update: pass at least one of --title/--status/--tracker-*/--tag/--untag")
 		}
 		entry, err := st.UpdateProject(args[0], up)
 		if err != nil {
@@ -171,6 +175,8 @@ func init() {
 	uf.StringVar(&updTrackerSystem, "tracker-system", "", "tracker system, e.g. linear|jira")
 	uf.StringVar(&updTrackerProject, "tracker-project", "", "tracker project name")
 	uf.StringVar(&updTrackerURL, "tracker-url", "", "tracker project URL")
+	uf.StringArrayVar(&updAddTags, "tag", nil, "add a tag (repeatable); drives tag:<t> concern scoping")
+	uf.StringArrayVar(&updRemoveTags, "untag", nil, "remove a tag (repeatable)")
 
 	projectCmd.AddCommand(projectCreateCmd, projectListCmd, projectShowCmd, projectUpdateCmd)
 	rootCmd.AddCommand(projectCmd)

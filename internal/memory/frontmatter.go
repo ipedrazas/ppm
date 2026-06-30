@@ -76,6 +76,73 @@ func (f *Frontmatter) SetNode(key string, node *yaml.Node) {
 	f.Node.Content = append(f.Node.Content, scalarNode(key), node)
 }
 
+// GetSeq returns the scalar values of a top-level sequence key (e.g. tags). A
+// missing key or a non-sequence value yields nil.
+func (f Frontmatter) GetSeq(key string) []string {
+	if f.Node == nil {
+		return nil
+	}
+	c := f.Node.Content
+	for i := 0; i+1 < len(c); i += 2 {
+		if c[i].Value == key {
+			seq := c[i+1]
+			if seq.Kind != yaml.SequenceNode {
+				return nil
+			}
+			out := make([]string, 0, len(seq.Content))
+			for _, item := range seq.Content {
+				if item.Kind == yaml.ScalarNode {
+					out = append(out, item.Value)
+				}
+			}
+			return out
+		}
+	}
+	return nil
+}
+
+// SetSeq assigns a top-level key to a flow-style scalar sequence (e.g. tags),
+// replacing it in place if present. An empty slice removes the key entirely.
+func (f *Frontmatter) SetSeq(key string, vals []string) {
+	if len(vals) == 0 {
+		f.Delete(key)
+		return
+	}
+	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	for _, v := range vals {
+		seq.Content = append(seq.Content, scalarNode(v))
+	}
+	f.SetNode(key, seq)
+}
+
+// Delete removes a top-level key if present, preserving the order of the rest.
+func (f *Frontmatter) Delete(key string) {
+	if f.Node == nil {
+		return
+	}
+	c := f.Node.Content
+	for i := 0; i+1 < len(c); i += 2 {
+		if c[i].Value == key {
+			f.Node.Content = append(c[:i], c[i+2:]...)
+			return
+		}
+	}
+}
+
+// HasMapping reports whether key holds a non-empty nested mapping (e.g. tracker).
+func (f Frontmatter) HasMapping(key string) bool {
+	if f.Node == nil {
+		return false
+	}
+	c := f.Node.Content
+	for i := 0; i+1 < len(c); i += 2 {
+		if c[i].Value == key {
+			return c[i+1].Kind == yaml.MappingNode && len(c[i+1].Content) > 0
+		}
+	}
+	return false
+}
+
 // ensureMap returns the nested mapping node at key, creating (or replacing a
 // non-mapping value with) an empty mapping if needed.
 func (f *Frontmatter) ensureMap(key string) *yaml.Node {
