@@ -85,7 +85,7 @@ Commands that take a body accept `--content` (primary) or `--file <path>`
 | `ppm initiative list` / `show <id>` / `update <id> --status` | Manage initiatives + rollup |
 | `ppm verdict <standard-id> <project> --status pass\|fail` | Resolve a manual standard |
 | `ppm waive <concern-id> <project> --content R` | Record a reasoned exception |
-| `ppm audit [--standard ID\|--initiative ID\|--check C] [--tag T\|--project P]` | Cross-project compliance matrix |
+| `ppm audit [--standard ID\|--initiative ID\|--check C] [--tag T\|--project P] [--strict]` | Cross-project compliance matrix |
 
 Global flags: `--root`, `-o/--output json|text`, `--pretty`, `--version`.
 
@@ -126,7 +126,12 @@ and a rollup closes the report. A `manual` standard reports `unknown` until a
 task backlinks to it (`bind` scaffolds that). Everything else is evaluated for free
 from existing data. A **waiver** turns an actionable `fail`/`unknown` into a
 reasoned `waived` (it never masks a `pass` or an out-of-scope `n/a`), so the matrix
-stays free of alert fatigue.
+stays free of alert fatigue. Pass `--strict` to exit non-zero when any cell fails,
+for CI gating.
+
+`ppm context <project>` injects the concerns whose scope includes that project —
+with their current status — as a **cross-cutting obligations** section, so the
+agent sees what consistency it must maintain every turn, not only on demand.
 
 Built-in checks: `has-summary`, `has-focus`, `decisions-link-tasks`,
 `active-has-tracker`, `no-stale-questions:Nd`, `freshness:Nd`. Standard scope

@@ -2,6 +2,7 @@ package memory
 
 import (
 	"os"
+	"time"
 )
 
 // ProjectLine is a one-line reference to a project, so cross-references resolve
@@ -26,6 +27,11 @@ type Context struct {
 	RecentDecisions []Entry       `json:"recentDecisions"`
 	Shape           *ProjectShape `json:"shape"`
 	OtherProjects   []ProjectLine `json:"otherProjects"`
+	// Standards and Initiatives are the cross-cutting concerns whose scope
+	// includes this project, each with its current audit status — so the agent
+	// sees its obligations every turn, not only when audit is run by hand.
+	Standards   []AuditCell `json:"standards"`
+	Initiatives []AuditCell `json:"initiatives"`
 }
 
 // ReadGlobal returns a workspace file's content (preferences/glossary/index),
@@ -92,6 +98,18 @@ func (s *Store) Context(project string, recentDecisions int) (*Context, error) {
 			Title:   title,
 			Status:  status,
 		})
+	}
+
+	// Cross-cutting obligations on this project: every active standard and
+	// initiative whose scope includes it, with its current status.
+	if rep, err := s.AuditAll(project, time.Now().UTC()); err == nil {
+		for _, c := range rep.Matrix {
+			if c.Kind == "initiative" {
+				ctx.Initiatives = append(ctx.Initiatives, c)
+			} else {
+				ctx.Standards = append(ctx.Standards, c)
+			}
+		}
 	}
 	return ctx, nil
 }

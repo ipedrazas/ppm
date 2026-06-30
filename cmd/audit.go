@@ -16,6 +16,7 @@ var (
 	auditInitiative string
 	auditTag        string
 	auditProject    string
+	auditStrict     bool
 )
 
 var auditCmd = &cobra.Command{
@@ -55,6 +56,11 @@ var auditCmd = &cobra.Command{
 		}
 		if err != nil {
 			return err
+		}
+		// --strict: render the matrix as usual, but exit non-zero if any cell
+		// failed — for CI gating. Waived/unknown do not trip it.
+		if auditStrict && rep.Summary[memory.StatusFail] > 0 {
+			pendingExit = 1
 		}
 		return emit(cmd, output.Result{
 			OK:      true,
@@ -104,9 +110,15 @@ func formatAudit(r *memory.AuditReport) string {
 	if len(r.Matrix) == 0 {
 		return "No matching standards or projects in scope."
 	}
+	wConcern := 0
+	for _, c := range r.Matrix {
+		if len(c.Concern) > wConcern {
+			wConcern = len(c.Concern)
+		}
+	}
 	var b strings.Builder
 	for _, c := range r.Matrix {
-		fmt.Fprintf(&b, "%-7s %s · %s", c.Status, c.Concern, c.Project)
+		fmt.Fprintf(&b, "%-7s %-*s  %s", c.Status, wConcern, c.Concern, c.Project)
 		if c.Severity != "" {
 			fmt.Fprintf(&b, " [%s]", c.Severity)
 		}
@@ -135,5 +147,6 @@ func init() {
 	f.StringVar(&auditInitiative, "initiative", "", "run a single initiative by id")
 	f.StringVar(&auditTag, "tag", "", "restrict the project axis to this tag")
 	f.StringVar(&auditProject, "project", "", "restrict the project axis to a single project")
+	f.BoolVar(&auditStrict, "strict", false, "exit non-zero if any cell failed (for CI gating)")
 	rootCmd.AddCommand(auditCmd)
 }

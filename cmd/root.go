@@ -38,6 +38,11 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// pendingExit lets a command request a non-zero exit after a normal (rendered)
+// result — e.g. `audit --strict` finding failures. It is consulted only when the
+// command itself did not return an error.
+var pendingExit int
+
 // Execute runs the root command and returns a process exit code. JSON errors go
 // to stdout (uniform machine parsing); human-readable errors go to stderr.
 func Execute() int {
@@ -49,7 +54,7 @@ func Execute() int {
 		}
 		return 1
 	}
-	return 0
+	return pendingExit
 }
 
 func init() {

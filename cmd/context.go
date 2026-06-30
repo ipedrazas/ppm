@@ -72,6 +72,25 @@ func formatContext(c *memory.Context) string {
 	b.WriteString("### shape\n")
 	b.WriteString(shapeInventory(c.Shape))
 
+	if len(c.Standards) > 0 || len(c.Initiatives) > 0 {
+		b.WriteString("\n\n### cross-cutting obligations")
+		for _, c := range c.Standards {
+			fmt.Fprintf(&b, "\n- standard %s [%s]: %s", c.Concern, c.Severity, c.Status)
+			if c.Reason != "" {
+				fmt.Fprintf(&b, " — %s", c.Reason)
+			}
+		}
+		for _, c := range c.Initiatives {
+			fmt.Fprintf(&b, "\n- initiative %s: %s", c.Concern, c.Status)
+			if c.Reason != "" {
+				fmt.Fprintf(&b, " — %s", c.Reason)
+			}
+			if c.Detail != "" {
+				fmt.Fprintf(&b, " (%s)", c.Detail)
+			}
+		}
+	}
+
 	if len(c.OtherProjects) > 0 {
 		b.WriteString("\n\n## Other projects\n")
 		for _, p := range c.OtherProjects {
